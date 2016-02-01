@@ -199,11 +199,15 @@ class Evaluator(object):
         self._spec_list = list(self.graph.spec.items())
 
     def __iter__(self):
+        tk_seen = set()
         for tk, td in self.data.groupby(self.graph.terminal_partitioner):
-            yield self.one(tk, td)
+            tk_seen.add(tk)
+            yield self._one(tk, td)
         if self.extra_data is not None:
             for tk, td in self.extra_data.groupby(self.graph.terminal_partitioner):
-                yield self.one(tk, td)
+                if tk not in tk_seen:
+                    yield self._one(tk, td)
+                    tk_seen.add(tk)
 
     @property
     def results(self):
@@ -212,19 +216,23 @@ class Evaluator(object):
             res.append((r, list(r.metrics_annotated(self))))
         return res
 
-    def one(self, terminal_key, terminal_data):
+    def _one(self, terminal_key, terminal_data):
         result_metrics = {}
         for metric, (extractor, merger) in self._spec_list:
             sm_params = []
-            native_value, native_size = extractor(terminal_data)
-            value = native_value
-            size = native_size
+
+            native_value, native_size = None, None
+            value = 0
+            size = 0
+
+            _res = extractor(terminal_data)
+            if _res is not None:
+                native_value, native_size = _res
+                value = native_value
+                size = native_size
 
             for mask in self._signatures:
                 te = terminal_data[list(mask)].drop_duplicates()
-
-                # if te.shape[0] != 1:
-                #     print('conflict at {}'.format(terminal_data))
 
                 key = tuple(te.values.tolist()[0])
                 # pick first value among duplicates, which is very crude
