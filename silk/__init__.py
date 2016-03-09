@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+import pandas
+
 __all__ = ['Graph', 'Evaluator', 'field_normed_by_clicks']
 
 
@@ -184,10 +186,9 @@ class Graph(object):
 
 
 class Evaluator(object):
-    def __init__(self, graph, data, extra_data=None):
+    def __init__(self, graph, data):
         self.graph = graph
         self.data = data
-        self.extra_data = extra_data
         self.terminal_nodes, self.all_nodes = self.graph.eval_graph(data)
         self.node_map = {x.key: x for x in self.all_nodes}
 
@@ -199,15 +200,11 @@ class Evaluator(object):
         self._spec_list = list(self.graph.spec.items())
 
     def __iter__(self):
-        tk_seen = set()
-        for tk, td in self.data.groupby(self.graph.terminal_partitioner):
-            tk_seen.add(tk)
+        part = self.graph.terminal_partitioner
+        if isinstance(part, (list, tuple)) and len(part) == 1:
+            part = part[0]
+        for tk, td in self.data.groupby(part):
             yield self._one(tk, td)
-        if self.extra_data is not None:
-            for tk, td in self.extra_data.groupby(self.graph.terminal_partitioner):
-                if tk not in tk_seen:
-                    yield self._one(tk, td)
-                    tk_seen.add(tk)
 
     @property
     def results(self):
@@ -248,6 +245,15 @@ class Evaluator(object):
                 result_metrics,
                 terminal_data,
         )
+
+    def to_frame(self, postfix='_sm'):
+        res = []
+        for r in self.results:
+            d = r.data.copy()
+            for name, metric in r.metrics.items():
+                d[name + postfix] = metric.value
+            res.append(d)
+        return pandas.concat(res)
 
 
 def field_normed_by_clicks(column_name):
